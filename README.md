@@ -19,7 +19,7 @@ pip install -r requirements.txt
 
 3. Update `config.py` if you want to change camera/video sources or tuning knobs.
 
-By default, `config.py` points to a Car1/Car2/Car3 stereo experiment in the `videos/` folder and exposes the same knobs that used to live in `.env`:
+By default, `config.py` points to a Car1/Car2/Car3 stereo experiment in the `videos/` folder and exposes the following knobs:
 
 - `CAM1_SRC`, `CAM2_SRC`: webcam indices, MP4 paths, or RTSP URLs (ints become device IDs, everything else is treated as a path/URL).
 - `WINDOW_SECONDS`, `FPS_SAMPLE`, `STREAM_FPS`, `DISPLAY_SCALE`: sampling rate and UI scaling.
@@ -36,11 +36,10 @@ Bounding-box size filtering is automatic: clips whose filenames contain `car1` u
 python main.py
 ```
 
-When both sources are finite videos, the longer clip is trimmed to the shorter one so their loops stay synchronized. The loop grabs frames at ~5 FPS, updates traffic counts, and prints sliding-window summaries plus warnings when the two views disagree.
-
 Press `ESC` to exit. Two windows show the annotated camera views.
 
 Each moving blob gets a green/orange "Car" bounding box plus a center-of-gravity marker (midpoint of the box) so you can visually inspect how both cameras track the same objects. Stationary objects caused by camera drift are ignored when their center moves less than `MIN_MOTION_PIXELS`, the auto `MIN_BOX_SIDE` heuristic (120px for Car1 clips, 50px otherwise) suppresses tiny detections, noisy speckles in the foreground mask can be dialed down via the `FG_*` parameters, and outlines with little true foreground fill are dropped via `MIN_FOREGROUND_RATIO`.
+Note: The object detection is not accurate. It is the bare minimum to show per‑camera motion, stereo geometry, and health metrics — not a production‑grade detector.
 
 ### Calibration workflow
 
@@ -52,7 +51,10 @@ Each moving blob gets a green/orange "Car" bounding box plus a center-of-gravity
 The repo ships with a small stereo experiment under `videos/` to exercise redundancy and drift detection:
 
 - **Car1 (baseline)** – Both cameras watch the same car pass with a fixed physical setup. Set `CAM1_SRC`/`CAM2_SRC` in `config.py` to the Car1 files and run once. The system enters calibration, aggregates a weighted grid of points while the car moves through the overlap, and saves a baseline homography.
+
 - **Car2 (same geometry)** – Swap `CAM1_SRC`/`CAM2_SRC` to the Car2 clips. The path is different and the car may be smaller, but the camera geometry is unchanged. You should see “Moving car detected” once the streak is satisfied, and the homography divergence stays below `HOMOGRAPHY_ERROR_THRESHOLD`, so no drift alert is raised.
+Note: Occasionally the homography error will spike high enough to flash a brief drift alert, then clear once the next car gives a cleaner geometry estimate. This is expected from imperfect object detection and the fact that we’re fitting a single planar transform to a real 3D scene with perspective.
+
 - **Car3 (camera moved)** – Keep `CAM1_SRC` on the Car3 clip and point `CAM2_SRC` at the `Car3`-angle-changed file. The traffic still looks reasonable, but one camera has been bumped. As soon as a moving car is confirmed, the fresh homography no longer matches the baseline, divergence exceeds the threshold, and the red “CAMERA DRIFT ALERT” band latches for the rest of the loop.
 
 This experiment shows how a simple stereo pair plus a homography baseline can call out physical camera movement separately from changes in the traffic itself.
